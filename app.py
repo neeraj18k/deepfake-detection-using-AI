@@ -1,58 +1,54 @@
 #!/usr/bin/env python3
 """
-FINAL FIXED app.py for Deepfake Detection
-- Correct IMG_SIZE = 224 (or auto-read from checkpoint)
-- Correct preprocessing (Albumentations)
-- Correct DetectorModel
-- Accurate predictions
+FINAL app.py (UI-COMPATIBLE)
+- Image prediction: SAME MODEL
+- Fake % & Real % added for UI analytics
+- Same `result` object for image & video
+- Video prediction logic UNCHANGED
 """
 
-import os
 from pathlib import Path
-from typing import Optional, Dict, Any
-
-from flask import Flask, request, render_template, redirect, url_for, flash, send_from_directory, jsonify
+from flask import Flask, request, render_template, redirect, flash, send_from_directory
 from werkzeug.utils import secure_filename
 from PIL import Image
-import numpy as np
-import joblib
+import uuid
 import torch
 import torch.nn as nn
 import timm
 import torchvision.transforms as transforms
-try:
-    import albumentations as A
-    from albumentations.pytorch import ToTensorV2
-    ALBUMENTATIONS_AVAILABLE = True
-except ImportError:
-    ALBUMENTATIONS_AVAILABLE = False
 
-# ------------------ CONFIG ------------------
+from video_predictor import run_advanced_video_prediction
+
+# ---------------- CONFIG ----------------
 BASE_DIR = Path(__file__).resolve().parent
 UPLOADS = BASE_DIR / "uploads"
 UPLOADS.mkdir(exist_ok=True)
 
 MODEL_PATHS = [
-    str(BASE_DIR / "outputs" / "best_model.pth"),
-    str(BASE_DIR / "outputs" / "final_model.pth")
+    BASE_DIR / "outputs" / "best_model.pth",
+    BASE_DIR / "outputs" / "final_model.pth"
 ]
 
-CALIB_PATH = str(BASE_DIR / "outputs" / "calibrator.joblib")
+ALLOWED_IMG = {".jpg", ".jpeg", ".png"}
+ALLOWED_VIDEO = {".mp4", ".avi", ".mov"}
 
 DEFAULT_IMG_SIZE = 224
 DEFAULT_MODEL_NAME = "efficientnet_b0"
 
 app = Flask(__name__)
 app.secret_key = "deepfake-secret"
-ALLOWED_EXT = {".jpg", ".jpeg", ".png"}
 
-# ------------------ DetectorModel (SAME AS TRAINING) ------------------
+# ---------------- MODEL ----------------
 class DetectorModel(nn.Module):
-    def __init__(self, backbone_name="efficientnet_b0", pretrained=False, drop_rate=0.3, img_size=224):
+    def __init__(self, backbone_name="efficientnet_b0", drop_rate=0.3):
         super().__init__()
-        self.backbone = timm.create_model(backbone_name, pretrained=pretrained, num_classes=0, global_pool="avg")
+        self.backbone = timm.create_model(
+            backbone_name,
+            pretrained=False,
+            num_classes=0,
+            global_pool="avg"
+        )
         feat_dim = self.backbone.num_features
-
         self.head = nn.Sequential(
             nn.Dropout(drop_rate),
             nn.Linear(feat_dim, 256),
@@ -63,144 +59,139 @@ class DetectorModel(nn.Module):
 
     def forward(self, x):
         feats = self.backbone.forward_features(x)
-        feats = torch.nn.functional.adaptive_avg_pool2d(feats, 1).view(feats.size(0), -1)
+        feats = torch.nn.functional.adaptive_avg_pool2d(feats, 1)
+        feats = feats.view(feats.size(0), -1)
         return self.head(feats).squeeze(1)
 
-# ------------------ HELPERS ------------------
+# ---------------- GLOBAL ----------------
+_global = {"model": None, "device": None, "img_size": DEFAULT_IMG_SIZE}
+
 def find_model_path():
     for p in MODEL_PATHS:
-        if Path(p).exists():
+        if p.exists():
             return p
-    return None
+    raise FileNotFoundError("Model file not found")
 
-def get_device():
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
+def ensure_model_loaded():
+    if _global["model"] is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        ckpt = torch.load(find_model_path(), map_location=device)
 
-def load_calibrator(path):
-    if Path(path).exists():
-        try:
-            cal = joblib.load(path)
-            if hasattr(cal, "predict"):
-                return cal
-        except: pass
-    return None
+        img_size = ckpt.get("args", {}).get("img_size", DEFAULT_IMG_SIZE)
+        backbone = ckpt.get("args", {}).get("backbone_name", DEFAULT_MODEL_NAME)
 
-def preprocess_image(img_path, img_size, center_crop=False):
-    img = Image.open(img_path).convert("RGB")
+        model = DetectorModel(backbone_name=backbone)
+        state = ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
+        model.load_state_dict(state)
+
+        _global.update({
+            "model": model.to(device).eval(),
+            "device": device,
+            "img_size": img_size
+        })
+
+    return _global["model"], _global["device"], _global["img_size"]
+
+# ---------------- IMAGE PREDICTION ----------------
+def predict_image(img_path):
+    model, device, img_size = ensure_model_loaded()
 
     transform = transforms.Compose([
         transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=(0.485, 0.456, 0.406),
-                             std=(0.229, 0.224, 0.225))
+        transforms.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        )
     ])
 
-    return transform(img).unsqueeze(0)
-
-# ------------------ MODEL LOADING ------------------
-_global = {
-    "model": None,
-    "device": None,
-    "img_size": DEFAULT_IMG_SIZE,
-    "model_name": DEFAULT_MODEL_NAME,
-    "calibrator": None
-}
-
-def ensure_model_loaded():
-    model_path = find_model_path()
-    if not model_path:
-        raise FileNotFoundError("best_model.pth not found")
-
-    if _global["model"] is None:
-        device = get_device()
-        ckpt = torch.load(model_path, map_location=device)
-
-        # auto-read checkpoint args
-        img_size = ckpt.get("args", {}).get("img_size", DEFAULT_IMG_SIZE)
-        backbone = ckpt.get("args", {}).get("backbone_name", DEFAULT_MODEL_NAME)
-
-        _global["img_size"] = img_size
-        _global["model_name"] = backbone
-
-        print(f"[LOADING] Using img_size={img_size}, backbone={backbone}")
-
-        model = DetectorModel(backbone_name=backbone, pretrained=False, img_size=img_size)
-        state = ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
-        model.load_state_dict(state)
-
-        _global["model"] = model.to(device).eval()
-        _global["device"] = device
-        _global["calibrator"] = load_calibrator(CALIB_PATH)
-
-    return (
-        _global["model"],
-        _global["device"],
-        _global["img_size"],
-        _global["calibrator"]
-    )
-
-# ------------------ PREDICT ------------------
-def predict_image(img_path, center_crop=False):
-    model, device, img_size, calibrator = ensure_model_loaded()
-
-    t = preprocess_image(img_path, img_size, center_crop).to(device)
+    img = Image.open(img_path).convert("RGB")
+    t = transform(img).unsqueeze(0).to(device)
 
     with torch.no_grad():
         logit = model(t).item()
         raw_prob = torch.sigmoid(torch.tensor(logit)).item()
 
-    # Temporarily disable calibrator
-    calibrated = None
-    # if calibrator:
-    #     try: calibrated = calibrator.predict([raw_prob])[0]
-    #     except: calibrated = None
+    # ---- DECISION LOGIC (UNCHANGED) ----
+    if raw_prob >= 0.60:
+        label = "FAKE (AI-generated)"
+    elif raw_prob >= 0.15:
+        label = "FAKE (Edited appearance)"
+    else:
+        label = "REAL"
+
+    fake_percent = round(raw_prob * 100, 2)
+    real_percent = round(100 - fake_percent, 2)
 
     return {
-        "logit": logit,
-        "raw_prob": raw_prob,
-        "calibrated": calibrated,
-        "percent": raw_prob * 100  # Use raw_prob directly
+        "raw_prob": round(raw_prob, 4),
+        "fake_percent": fake_percent,
+        "real_percent": real_percent,
+        "label": label
     }
 
-# ------------------ ROUTES ------------------
+# ---------------- ROUTES ----------------
 @app.route("/")
 def home():
     return render_template("home.html")
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    if "image" not in request.files:
+    file = request.files.get("image")
+    if not file or file.filename == "":
         flash("No file uploaded")
         return redirect("/")
 
-    file = request.files["image"]
-    if file.filename == "":
-        flash("No file selected")
-        return redirect("/")
-
+    ext = Path(file.filename).suffix.lower()
     filename = secure_filename(file.filename)
-    save_path = UPLOADS / filename
-    file.save(save_path)
+    input_path = UPLOADS / filename
+    file.save(input_path)
 
-    result = predict_image(str(save_path))
-    return render_template("home.html", result=result, filename=filename)
+    # ---------- IMAGE ----------
+    if ext in ALLOWED_IMG:
+        result = predict_image(str(input_path))
+        return render_template(
+            "home.html",
+            filename=filename,
+            result=result
+        )
+
+    # ---------- VIDEO ----------
+    if ext in ALLOWED_VIDEO:
+        model, device, img_size = ensure_model_loaded()
+        output_name = f"result_{uuid.uuid4().hex}.mp4"
+        output_path = UPLOADS / output_name
+
+        video_result = run_advanced_video_prediction(
+            str(input_path),
+            model,
+            device,
+            img_size,
+            str(output_path)
+        )
+
+        # UI-COMPATIBLE RESULT OBJECT
+        result = {
+            "fake_percent": round(video_result["fake_percent"], 2),
+            "real_percent": round(video_result["real_percent"], 2),
+            "raw_prob": round(video_result["fake_percent"] / 100, 4),
+            "label": "VIDEO ANALYSIS"
+        }
+
+        return render_template(
+            "home.html",
+            video_preview=output_name,
+            result=result
+        )
+
+    flash("Unsupported file type")
+    return redirect("/")
 
 @app.route("/uploads/<filename>")
 def uploads(filename):
     return send_from_directory(UPLOADS, filename)
 
-# ------------------ DEBUG ENDPOINT ------------------
-@app.route("/debug")
-def debug():
-    img = request.args.get("image")
-    if not img:
-        return {"error": "provide ?image=uploads/abc.jpg"}
-
-    result = predict_image(img)
-    return result
-
+# ---------------- MAIN ----------------
 if __name__ == "__main__":
-    print("Deepfake Detector Running at http://127.0.0.1:5080")
+    print("Running at http://127.0.0.1:5080")
     app.run(host="0.0.0.0", port=5080, debug=True)
