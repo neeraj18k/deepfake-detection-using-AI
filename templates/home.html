@@ -1,228 +1,283 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DeepFake Detector — Predict</title>
+<meta charset="UTF-8">
+<title>Veritas AI | Deepfake Detector</title>
 
-  <!-- Bootstrap 5 + Icons -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <style>
-    :root{
-      --bg:#0f1724; /* dark navy */
-      --card:#0b1220;
-      --glass: rgba(255,255,255,0.04);
-      --accent: #6ee7b7; /* soft mint */
-    }
-    html,body{height:100%;}
-    body{
-      background: radial-gradient(1200px 500px at 10% 10%, rgba(110,231,183,0.06), transparent),
-                  linear-gradient(180deg, rgba(10,14,20,1) 0%, rgba(15,23,36,1) 100%);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      color: #e6eef6;
-      padding: 3rem 1rem;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-    }
+<style>
+*{box-sizing:border-box}
+body{
+    margin:0;
+    font-family:Inter,sans-serif;
+    color:#e5e7eb;
 
-    .container-card{max-width:980px;margin:0 auto}
-    .glass-card{
-      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-      border: 1px solid rgba(255,255,255,0.04);
-      backdrop-filter: blur(8px) saturate(120%);
-      border-radius: 16px;
-      padding: 1.25rem;
-      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
-    }
+    /* HACKER / CYBER BACKGROUND */
+    background:
+        linear-gradient(rgba(2,6,23,0.82), rgba(2,6,23,0.9)),
+        url("https://images.unsplash.com/photo-1504639725590-34d0984388bd");
+    background-size:cover;
+    background-attachment:fixed;
+    background-position:center;
+}
 
-    .app-header{display:flex;gap:1rem;align-items:center}
-    .brand {display:flex;flex-direction:column}
-    .brand h1{font-size:1.25rem;margin:0}
-    .brand p{margin:0;font-size:0.85rem;color:rgba(230,238,246,0.7)}
+/* HEADER */
+.header{
+    padding:18px 40px;
+    font-weight:800;
+    font-size:20px;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    backdrop-filter:blur(8px);
+}
 
-    .uploader{border:1px dashed rgba(255,255,255,0.05);border-radius:12px;padding:1rem;cursor:pointer}
-    .uploader.drag{background:rgba(110,231,183,0.02);border-color:rgba(110,231,183,0.14)}
+/* LAYOUT */
+.main{
+    display:grid;
+    grid-template-columns: 38% 62%;
+    gap:30px;
+    padding:30px 40px;
+}
 
-    img.preview{max-width:100%;max-height:360px;border-radius:10px;object-fit:contain}
+/* UPLOAD PANEL */
+.upload-card{
+    background:rgba(15,23,42,0.92);
+    border-radius:18px;
+    padding:26px;
+    border:1px solid rgba(255,255,255,0.1);
+}
 
-    .result-value{font-size:2.25rem;font-weight:700}
-    .subtle{color:rgba(230,238,246,0.7)}
+/* DROP ZONE */
+.drop-zone{
+    border:2px dashed rgba(255,255,255,0.3);
+    border-radius:16px;
+    height:200px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    cursor:pointer;
+    transition:.3s;
+    text-align:center;
+    font-size:15px;
+}
+.drop-zone:hover{
+    border-color:#38bdf8;
+    background:rgba(56,189,248,0.12);
+}
 
-    .muted{color:rgba(230,238,246,0.55);font-size:0.92rem}
+/* PREVIEW */
+.preview-box{
+    margin-top:18px;
+    display:flex;
+    justify-content:center;
+}
+.preview-box img,
+.preview-box video{
+    max-width:360px;
+    max-height:220px;
+    border-radius:14px;
+    object-fit:contain;
+    box-shadow:0 12px 30px rgba(0,0,0,0.7);
+}
 
-    @media (max-width:768px){
-      body{padding:1.25rem}
-      .result-value{font-size:1.6rem}
-    }
+/* BUTTONS */
+button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:12px;
+    font-weight:700;
+    margin-top:14px;
+    cursor:pointer;
+}
+.analyze{
+    background:#2563eb;
+    color:white;
+}
+.reset{
+    background:transparent;
+    color:#9ca3af;
+    border:1px solid rgba(255,255,255,0.18);
+}
 
-    /* little animated pulse for model badge */
-    .model-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.25rem .6rem;border-radius:999px;background:linear-gradient(90deg, rgba(110,231,183,0.07), rgba(110,231,183,0.03));border:1px solid rgba(110,231,183,0.06)}
-    .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px rgba(110,231,183,0.16)}
-  </style>
+/* ANALYSIS PANEL */
+.result-panel{
+    background:linear-gradient(
+        180deg,
+        rgba(31,41,55,0.96),
+        rgba(2,6,23,0.96)
+    );
+    border-radius:22px;
+    padding:36px;
+    border:1px solid rgba(255,255,255,0.12);
+}
+
+/* STATUS */
+.status{
+    background:rgba(34,197,94,0.18);
+    color:#22c55e;
+    padding:10px 16px;
+    border-radius:12px;
+    font-weight:600;
+    margin-bottom:26px;
+    display:inline-block;
+}
+
+/* GAUGE */
+.gauge{
+    position:relative;
+    width:280px;
+    margin:10px auto 34px;
+}
+.gauge svg{
+    transform:rotate(-90deg);
+}
+.gauge-value{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:42px;
+    font-weight:800;
+}
+
+/* BARS */
+.bar{
+    margin:18px 0;
+}
+.bar small{
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:8px;
+    opacity:.9;
+}
+.progress{
+    height:12px;
+    background:#020617;
+    border-radius:12px;
+    overflow:hidden;
+}
+.real{background:#38bdf8;height:100%}
+.fake{background:#fb7185;height:100%}
+
+/* RAW SCORE */
+.raw-box{
+    margin-top:28px;
+    background:rgba(255,255,255,0.07);
+    padding:20px;
+    border-radius:16px;
+    text-align:center;
+}
+.raw-box h2{
+    margin:6px 0;
+    font-size:32px;
+}
+</style>
 </head>
+
 <body>
-  <div class="container container-card">
-    <div class="glass-card">
-      <div class="d-flex justify-content-between align-items-start mb-3 app-header">
-        <div class="brand">
-          <h1 class="mb-0">DeepFake Detector</h1>
-          <p class="muted">Upload an image and the model returns the probability it is a deepfake (0–100%).</p>
-        </div>
 
-        <div class="text-end">
-          <div class="model-badge">
-            <div class="dot" aria-hidden="true"></div>
-            <div class="muted">EfficientNet‑B0 • 128px • Calibrated</div>
-          </div>
-        </div>
-      </div>
+<div class="header">Veritas AI · Deepfake Detection System</div>
 
-      <!-- Form (Flask/Jinja compatible) -->
-      <form method="post" action="{{ url_for('predict') }}" enctype="multipart/form-data" id="predictForm">
-        <div class="row gx-3 align-items-center">
-          <div class="col-lg-6">
-            <label for="fileInput" class="form-label mb-2 subtle">Choose image</label>
+<div class="main">
 
-            <div id="dropZone" class="uploader" tabindex="0">
-              <div class="d-flex align-items-center gap-3">
-                <div class="fs-2 text-muted"><i class="bi bi-image"></i></div>
-                <div>
-                  <div class="fw-semibold">Drag & drop an image, or</div>
-                  <div class="muted">PNG, JPG, JPEG — recommended up to 1024×1024</div>
-                </div>
-              </div>
+<!-- LEFT : UPLOAD + PREVIEW -->
+<div class="upload-card">
+<form action="/predict" method="post" enctype="multipart/form-data" id="uploadForm">
 
-              <input class="form-control mt-3" type="file" id="fileInput" name="image" accept="image/*" required style="opacity:0;position:absolute;left:-9999px;" />
-              <div class="mt-3">
-                <button type="button" class="btn btn-outline-light btn-sm" id="chooseBtn"><i class="bi bi-upload me-1"></i>Select file</button>
-                <button type="submit" class="btn btn-primary btn-sm ms-2" id="predictBtn"><i class="bi bi-robot me-1"></i> Predict</button>
-                <a href="{{ url_for('home') }}" class="btn btn-link btn-sm text-decoration-none ms-2">Reset</a>
-              </div>
-            </div>
+<label class="drop-zone">
+    ☁️ <strong>Select Image or Video</strong>
+    <small>Supported: JPG, PNG, MP4</small>
+    <input id="fileInput" type="file" name="image" hidden required>
+</label>
 
-            <div class="mt-3">
-              {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                  {% for category, msg in messages %}
-                    <div class="alert alert-{{ category }} small mb-2">{{ msg }}</div>
-                  {% endfor %}
-                {% endif %}
-              {% endwith %}
-            </div>
+<div class="preview-box" id="previewBox"></div>
 
-            <div class="mt-2 muted small">Tip: clear backgrounds and faces that are well-lit perform better.</div>
-          </div>
+<button class="analyze">Analyze</button>
+<button type="button" class="reset" id="resetBtn">Reset</button>
 
-          <div class="col-lg-6">
-            <!-- Preview / Result Card -->
-            <div class="p-3 rounded-3" style="background:var(--glass);">
-              {% if result %}
-                <div class="d-flex gap-3 align-items-start">
-                  <div style="width:42%;">
-                    <p class="muted mb-1">Uploaded</p>
-                    <img src="{{ url_for('uploads', filename=filename) }}" class="preview" alt="uploaded image" />
-                  </div>
-                  <div style="flex:1;">
-                    <p class="muted mb-1">Model output</p>
-                    <div class="result-value">{{ "%.2f"|format(result.percent) }}%</div>
-                    <div class="muted mb-3">(calibrated probability — higher means more likely <strong>fake</strong>)</div>
+</form>
+</div>
 
-                    <div class="mb-2">
-                      <span class="muted">Raw model probability:</span>
-                      <div class="fw-semibold">{{ "%.4f"|format(result.raw_prob) }}</div>
-                    </div>
+<!-- RIGHT : ANALYSIS -->
+<div class="result-panel">
 
-                    <div class="mt-3">
-                      {% if result.percent >= 50 %}
-                        <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Prediction:</strong> Likely <em>FAKE</em></div>
-                      {% else %}
-                        <div class="alert alert-success py-2"><i class="bi bi-check-circle-fill me-2"></i><strong>Prediction:</strong> Likely <em>REAL</em></div>
-                      {% endif %}
-                    </div>
+{% if result %}
+<div class="status">✔ Analysis Complete</div>
 
-                    <div class="mt-2 muted small">Confidence calibration applied (Platt scaling / isotonic). Use thresholds conservatively.</div>
-                  </div>
-                </div>
-              {% else %}
-                <div class="text-center py-5">
-                  <i class="bi bi-image fs-1 text-muted"></i>
-                  <p class="muted mt-2">No image selected yet — preview will appear here.</p>
-                </div>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      </form>
+<div class="gauge">
+<svg width="280" height="280">
+<circle cx="140" cy="140" r="120" stroke="#1e293b" stroke-width="20" fill="none"/>
+<circle cx="140" cy="140" r="120"
+ stroke="#38bdf8"
+ stroke-width="20"
+ fill="none"
+ stroke-dasharray="754"
+ stroke-dashoffset="{{ 754 - (result.real_percent/100)*754 }}"
+ stroke-linecap="round"/>
+</svg>
+<div class="gauge-value">{{ result.real_percent }}%</div>
+</div>
 
-      <hr class="mt-4" />
-      <div class="d-flex justify-content-between align-items-center muted small">
-        <div>Model: <strong>EfficientNet-B0</strong> · Image size: <strong>128</strong></div>
-        <div>Built with care • <span class="text-nowrap">Calibration applied</span></div>
-      </div>
-    </div>
+<div class="bar">
+<small><span>Real Confidence</span><span>{{ result.real_percent }}%</span></small>
+<div class="progress"><div class="real" style="width:{{ result.real_percent }}%"></div></div>
+</div>
 
-    <div class="text-center mt-3 muted small">© {{ current_year or "2025" }} — Use responsibly. This tool provides probabilistic outputs and may be incorrect.</div>
-  </div>
+<div class="bar">
+<small><span>Fake Probability</span><span>{{ result.fake_percent }}%</span></small>
+<div class="progress"><div class="fake" style="width:{{ result.fake_percent }}%"></div></div>
+</div>
 
-  <!-- Scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    // Small UX: clicking the visible button opens hidden input
-    const fileInput = document.getElementById('fileInput');
-    const chooseBtn = document.getElementById('chooseBtn');
-    const dropZone = document.getElementById('dropZone');
-    const predictForm = document.getElementById('predictForm');
+<div class="raw-box">
+<small>Raw Probability Score</small>
+<h2>{{ result.raw_prob }}</h2>
+<small>Model Confidence (0–1)</small>
+</div>
 
-    chooseBtn.addEventListener('click', () => fileInput.click());
+{% else %}
+<p style="opacity:.65;font-size:16px">
+Upload an image or video to start deepfake analysis.
+</p>
+{% endif %}
 
-    // Drag & drop interaction
-    ['dragenter','dragover'].forEach(ev => {
-      dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag'); });
-    });
-    ['dragleave','drop'].forEach(ev => {
-      dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag'); });
-    });
+</div>
+</div>
 
-    dropZone.addEventListener('drop', (e)=>{
-      const dt = e.dataTransfer;
-      if(!dt || !dt.files || dt.files.length===0) return;
-      fileInput.files = dt.files; // set files for form submit
-      showPreview(dt.files[0]);
-    });
+<!-- JS : PREVIEW + RESET -->
+<script>
+const input = document.getElementById("fileInput");
+const previewBox = document.getElementById("previewBox");
+const resetBtn = document.getElementById("resetBtn");
 
-    fileInput.addEventListener('change', (e)=>{
-      if(e.target.files && e.target.files[0]) showPreview(e.target.files[0]);
-    });
+input.addEventListener("change", () => {
+    previewBox.innerHTML = "";
 
-    function showPreview(file){
-      // create preview image element if not present
-      const existing = document.querySelector('.preview');
-      const reader = new FileReader();
-      reader.onload = function(ev){
-        if(existing){ existing.src = ev.target.result; }
-        else{
-          // create a quick preview area in the left column (mobile-friendly fallback)
-          const img = document.createElement('img');
-          img.className = 'preview';
-          img.src = ev.target.result;
-          const container = document.querySelector('#dropZone');
-          container.parentNode.querySelector('.muted');
-          container.appendChild(img);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!input.files || !input.files[0]) return;
+
+    const file = input.files[0];
+    const url = URL.createObjectURL(file);
+
+    if (file.type.startsWith("image")) {
+        const img = document.createElement("img");
+        img.src = url;
+        previewBox.appendChild(img);
+    } else if (file.type.startsWith("video")) {
+        const video = document.createElement("video");
+        video.src = url;
+        video.controls = true;
+        previewBox.appendChild(video);
     }
+});
 
-    // Accessibility: allow Enter/Space to open file picker on dropZone
-    dropZone.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+resetBtn.addEventListener("click", () => {
+    input.value = "";
+    previewBox.innerHTML = "";
+    window.location.href = "/";
+});
+</script>
 
-    // Optional: prevent multiple submits while waiting for server
-    predictForm.addEventListener('submit', (e)=>{
-      const btn = document.getElementById('predictBtn');
-      btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Predicting...';
-    });
-  </script>
 </body>
 </html>
