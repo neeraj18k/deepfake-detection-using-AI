@@ -63,7 +63,7 @@ def find_model_path():
     for p in MODEL_PATHS:
         if p.exists():
             return p
-    return None   # no crash on Render
+    return None  # Render-safe
 
 def ensure_model_loaded():
     if _global["model"] is None:
@@ -164,23 +164,26 @@ def predict():
         }
         return render_template("home.html", result=result)
 
-    # ---------- VIDEO (BOX + % OVERLAY ENABLED) ----------
+    # ---------- VIDEO ----------
     if ext in ALLOWED_VIDEO:
         model, device, img_size = ensure_model_loaded()
 
         output_name = f"result_{uuid.uuid4().hex}.mp4"
         output_path = UPLOADS / output_name
 
-        # 🔥 IMPORTANT: run video processor even in fallback
-        video_result = run_advanced_video_prediction(
-            str(input_path),
-            model,          # may be None → fallback handled inside
-            device,
-            img_size,
-            str(output_path)
-        )
+        try:
+            video_result = run_advanced_video_prediction(
+                str(input_path),
+                model,
+                device,
+                img_size,
+                str(output_path),
+                max_frames=120   # Render-safe limit
+            )
+        except Exception as e:
+            flash(f"Video processing failed: {e}")
+            return redirect("/")
 
-        # if predictor returns None (fallback)
         fake_p = video_result.get("fake_percent", 64.0)
         real_p = video_result.get("real_percent", 36.0)
 
@@ -198,4 +201,3 @@ def predict():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5080))
     app.run(host="0.0.0.0", port=port)
-
