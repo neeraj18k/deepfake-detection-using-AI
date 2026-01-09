@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import cv2
 import torch
 from collections import deque
@@ -109,7 +109,7 @@ def run_advanced_video_prediction(
         "real_percent": round((1 - fake_avg) * 100, 2),
         "output_path": output_path
     }
-=======
+
 import cv2
 import torch
 from collections import deque
@@ -220,4 +220,4 @@ def run_advanced_video_prediction(
         "real_percent": round((1 - fake_avg) * 100, 2),
         "output_path": output_path
     }
->>>>>>> e5e73b60b65413b5f3f2b7cb91a8deb0c7309cdd
+
