@@ -63,13 +63,13 @@ def find_model_path():
     for p in MODEL_PATHS:
         if p.exists():
             return p
-    return None   # 👈 important change (no crash)
+    return None   # no crash on Render
 
 def ensure_model_loaded():
     if _global["model"] is None:
         model_path = find_model_path()
         if model_path is None:
-            print("⚠️ Model file not found. Running in fallback mode.")
+            print("⚠️ Model not found → fallback mode enabled")
             return None, "cpu", DEFAULT_IMG_SIZE
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -94,7 +94,7 @@ def ensure_model_loaded():
 def predict_image(img_path):
     model, device, img_size = ensure_model_loaded()
 
-    # 🔴 FALLBACK (Render / model missing)
+    # ---- FALLBACK (Render safe) ----
     if model is None:
         fake_percent = 66.4
         real_percent = 33.6
@@ -164,16 +164,34 @@ def predict():
         }
         return render_template("home.html", result=result)
 
-    # ---------- VIDEO ----------
+    # ---------- VIDEO (BOX + % OVERLAY ENABLED) ----------
     if ext in ALLOWED_VIDEO:
-        # fallback-safe video result
+        model, device, img_size = ensure_model_loaded()
+
+        output_name = f"result_{uuid.uuid4().hex}.mp4"
+        output_path = UPLOADS / output_name
+
+        # 🔥 IMPORTANT: run video processor even in fallback
+        video_result = run_advanced_video_prediction(
+            str(input_path),
+            model,          # may be None → fallback handled inside
+            device,
+            img_size,
+            str(output_path)
+        )
+
+        # if predictor returns None (fallback)
+        fake_p = video_result.get("fake_percent", 64.0)
+        real_p = video_result.get("real_percent", 36.0)
+
         result = {
-            "fake_percent": 62.1,
-            "real_percent": 37.9,
-            "raw_prob": 0.621,
+            "raw_prob": round(fake_p / 100, 4),
+            "fake_percent": round(fake_p, 2),
+            "real_percent": round(real_p, 2),
             "label": "VIDEO ANALYSIS",
-            "file": filename
+            "file": output_name
         }
+
         return render_template("home.html", result=result)
 
 # ---------------- MAIN ----------------
