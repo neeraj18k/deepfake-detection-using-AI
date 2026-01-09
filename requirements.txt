@@ -11,7 +11,5 @@ opencv-python-headless
 tqdm
 
 
-=======
 albumentations==1.3.1
 gunicorn
->>>>>>> e5e73b60b65413b5f3f2b7cb91a8deb0c7309cdd
